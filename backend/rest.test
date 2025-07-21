@@ -1,0 +1,41 @@
+### Health Check
+
+GET http://localhost:5000/health
+Content-Type: application/json
+
+###
+
+### Login/Register User
+POST http://localhost:5000/login
+Content-Type: application/json
+
+{
+  "username": "jagmeet"
+}
+
+###
+
+### Create Group
+POST http://localhost:5000/group/create
+Content-Type: application/json
+
+{
+  "groupName": "React Developers"
+}
+
+###
+
+### Join Group
+POST http://localhost:5000/group/join
+Content-Type: application/json
+
+{
+  "groupId": "PASTE_GROUP_ID_HERE",
+  "username": "jagmeet"
+}
+
+###
+
+### Get Group Messages
+GET http://localhost:5000/group/PASTE_GROUP_ID_HERE/messages
+Content-Type: application/json

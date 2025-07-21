@@ -1,170 +1,269 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import io from "socket.io-client";
 import axios from "axios";
-import './App.css';
+import "./App.css";
 
-const BACKEND_URL = "https://textnest.onrender.com"; // ← Render backend URL
-const socket = io(BACKEND_URL);
+const socket = io("http://localhost:5000");
+const API_BASE = "http://localhost:5000";
 
-function App() {
+export default function App() {
   const [username, setUsername] = useState("");
-  const [inputName, setInputName] = useState("");
+  const [password, setPassword] = useState("");
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [users, setUsers] = useState([]);
+  const [selectedUser, setSelectedUser] = useState("");
+  const [groupId, setGroupId] = useState("");
+  const [groupName, setGroupName] = useState("");
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([]);
-  const chatEndRef = useRef(null);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [showSearch, setShowSearch] = useState(false);
-  const searchInputRef = useRef(null);
-  const [theme, setTheme] = useState('light');
-  const toggleTheme = () => setTheme(theme === 'light' ? 'dark' : 'light');
+  const [activeTab, setActiveTab] = useState("users");
+  const messagesEndRef = useRef(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
 
   useEffect(() => {
-    axios.get(`${BACKEND_URL}/messages`).then((res) => {
-      setMessages(res.data);
-    });
-
-    socket.on("receiveMessage", (msg) => {
-      setMessages((prev) => [...prev, msg]);
-    });
-
-    return () => {
-      socket.off("receiveMessage");
-    };
-  }, [username]);
-
-  useEffect(() => {
-    // Scroll to bottom when messages change
-    if (chatEndRef.current) {
-      chatEndRef.current.scrollIntoView({ behavior: "smooth" });
-    }
+    scrollToBottom();
   }, [messages]);
 
-  // Close search on outside click or Esc
   useEffect(() => {
-    if (!showSearch) return;
-    function handleClick(e) {
-      if (searchInputRef.current && !searchInputRef.current.contains(e.target)) {
-        setShowSearch(false);
-      }
-    }
-    function handleEsc(e) {
-      if (e.key === "Escape") setShowSearch(false);
-    }
-    document.addEventListener("mousedown", handleClick);
-    document.addEventListener("keydown", handleEsc);
-    return () => {
-      document.removeEventListener("mousedown", handleClick);
-      document.removeEventListener("keydown", handleEsc);
-    };
-  }, [showSearch]);
+    if (!isLoggedIn) return;
 
-  const handleLogin = async () => {
+    socket.on("receivePersonalMessage", (data) => {
+      if (data.sender === selectedUser || data.receiver === selectedUser) {
+        setMessages(prev => [...prev, data]);
+      }
+    });
+
+    socket.on("receiveGroupMessage", (data) => {
+      if (data.receiver === groupId) {
+        setMessages(prev => [...prev, data]);
+      }
+    });
+
+    return () => {
+      socket.off("receivePersonalMessage");
+      socket.off("receiveGroupMessage");
+    };
+  }, [isLoggedIn, selectedUser, groupId]);
+
+  const handleSignup = async () => {
     try {
-      const res = await axios.post(`${BACKEND_URL}/login`, { username: inputName });
-      setUsername(res.data.username);
-      socket.emit("join", inputName);
-    } catch {
-      alert("Username taken or invalid.");
+      await axios.post(`${API_BASE}/signup`, { username, password });
+      alert("Signup successful! Please login.");
+    } catch (err) {
+      alert(err.response?.data?.error || "Signup failed");
+    }
+  };
+
+  const handleSignin = async () => {
+    try {
+      await axios.post(`${API_BASE}/signin`, { username, password });
+      setIsLoggedIn(true);
+      socket.emit("register", username);
+      fetchUsers();
+    } catch (err) {
+      alert(err.response?.data?.error || "Login failed");
+    }
+  };
+
+  const fetchUsers = async () => {
+    try {
+      const res = await axios.get(`${API_BASE}/users`);
+      setUsers(res.data.filter(user => user.username !== username));
+    } catch (err) {
+      console.error("Failed to fetch users", err);
+    }
+  };
+
+  const fetchMessages = async (receiver) => {
+    try {
+      const res = await axios.get(`${API_BASE}/messages/${username}`);
+      setMessages(res.data.filter(msg => 
+        (msg.sender === receiver || msg.receiver === receiver) ||
+        (msg.receiver === groupId && activeTab === "group")
+      ));
+    } catch (err) {
+      console.error("Failed to fetch messages", err);
+    }
+  };
+
+  const createGroup = async () => {
+    const name = prompt("Enter group name:");
+    if (!name) return;
+    
+    try {
+      const res = await axios.post(`${API_BASE}/group/create`, { 
+        groupName: name,
+        username 
+      });
+      setGroupId(res.data.groupId);
+      setGroupName(res.data.groupName);
+      alert(`Group created: ${res.data.groupName}`);
+      setActiveTab("group");
+      fetchMessages(res.data.groupId);
+    } catch (err) {
+      alert(err.response?.data?.error || "Group creation failed");
+    }
+  };
+
+  const joinGroup = async () => {
+    const name = prompt("Enter group name:");
+    if (!name) return;
+    
+    try {
+      const res = await axios.post(`${API_BASE}/group/join`, {
+        groupName: name,
+        username
+      });
+      setGroupId(res.data.groupId);
+      setGroupName(res.data.groupName);
+      setActiveTab("group");
+      fetchMessages(res.data.groupId);
+    } catch (err) {
+      alert(err.response?.data?.error || "Join group failed");
     }
   };
 
   const sendMessage = () => {
-    if (message.trim() !== "") {
-      const msg = { username, text: message };
-      socket.emit("sendMessage", msg);
-      setMessage("");
+    if (!message.trim()) return;
+    
+    if (activeTab === "users" && selectedUser) {
+      socket.emit("sendPersonalMessage", {
+        sender: username,
+        receiver: selectedUser,
+        content: message
+      });
+    } else if (activeTab === "group" && groupId) {
+      socket.emit("sendGroupMessage", {
+        groupId,
+        sender: username,
+        content: message
+      });
+    }
+    
+    setMessage("");
+  };
+
+  const handleKeyPress = (e) => {
+    if (e.key === "Enter") {
+      sendMessage();
     }
   };
 
-  // Filtered messages for search
-  const filteredMessages = searchTerm
-    ? messages.filter(
-        (msg) =>
-          msg.text.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          msg.username.toLowerCase().includes(searchTerm.toLowerCase())
-      )
-    : messages;
+  const selectUser = (user) => {
+    setSelectedUser(user.username);
+    setActiveTab("users");
+    fetchMessages(user.username);
+  };
 
-  if (!username) {
+  if (!isLoggedIn) {
     return (
-      <div className="login-split-container">
-        <div className="login-welcome-section">
-          <div className="app-logo">TextNest</div>
-          <h1 className="welcome-title">Connect<br/>friends<br/>easily &<br/>quickly</h1>
-          <p className="welcome-desc">Our chat app is the perfect way to stay connected with friends and family.</p>
-        </div>
-        <div className="login-container">
-          <h2 className="login-title">Login</h2>
-          <form className="login-form" onSubmit={e => { e.preventDefault(); handleLogin(); }}>
-            <input
-              className="login-input"
-              value={inputName}
-              onChange={(e) => setInputName(e.target.value)}
-              placeholder="Enter a unique username"
-              autoFocus
-            />
-            <button className="login-button" type="submit">Enter Chat</button>
-          </form>
+      <div className="auth-container">
+        <h1>TextNest Chat</h1>
+        <div className="auth-form">
+          <input
+            placeholder="Username"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+          />
+          <input
+            type="password"
+            placeholder="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+          <div className="auth-buttons">
+            <button onClick={handleSignin}>Sign In</button>
+            <button onClick={handleSignup}>Sign Up</button>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className={`chat-app-container ${theme}-theme`}>
-      <div className="app-logo chat-logo-centered">TextNest</div>
-      <div className="chat-header">
-        <div className="chat-title">Welcome, {username}</div>
-        <div className="chat-header-actions">
-          <button className="theme-toggle-btn" onClick={toggleTheme} title={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}>
-            {theme === 'light' ? '🌙' : '☀️'}
-          </button>
-          <div
-            className="search-icon-button"
-            onClick={() => setShowSearch((v) => !v)}
-            title="Find a previous chat"
-          >
-            <span className="search-icon" role="img" aria-label="search">🔍</span>
+    <div className="app-container">
+      <header className="app-header">
+        <h1>TextNest Chat - {username}</h1>
+        <button onClick={() => setIsLoggedIn(false)}>Logout</button>
+      </header>
+
+      <div className="main-content">
+        <div className="sidebar">
+          <div className="sidebar-section">
+            <h3>Users</h3>
+            <ul>
+              {users.map(user => (
+                <li 
+                  key={user.username} 
+                  className={selectedUser === user.username ? "active" : ""}
+                  onClick={() => selectUser(user)}
+                >
+                  {user.username}
+                </li>
+              ))}
+            </ul>
           </div>
-          <div className="user-status">
-            <span className="status-dot online"></span>
-            User online
+
+          <div className="sidebar-section">
+            <h3>Groups</h3>
+            <button onClick={createGroup}>Create Group</button>
+            <button onClick={joinGroup}>Join Group</button>
+            {groupName && (
+              <div 
+                className={`group-item ${activeTab === "group" ? "active" : ""}`}
+                onClick={() => {
+                  setActiveTab("group");
+                  fetchMessages(groupId);
+                }}
+              >
+                {groupName}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="chat-area">
+          <div className="chat-header">
+            {activeTab === "users" ? (
+              <h2>{selectedUser || "Select a user to chat"}</h2>
+            ) : (
+              <h2>Group: {groupName || "No group selected"}</h2>
+            )}
+          </div>
+
+          <div className="messages-container">
+            {messages.map((msg, i) => (
+              <div 
+                key={i} 
+                className={`message ${msg.sender === username ? "sent" : "received"}`}
+              >
+                <span className="sender">{msg.sender}: </span>
+                <span className="content">{msg.content}</span>
+              </div>
+            ))}
+            <div ref={messagesEndRef} />
+          </div>
+
+          <div className="message-input">
+            <input
+              placeholder="Type your message..."
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              onKeyPress={handleKeyPress}
+              disabled={!selectedUser && activeTab === "users" && !groupId}
+            />
+            <button 
+              onClick={sendMessage}
+              disabled={!message || (activeTab === "users" && !selectedUser) || (activeTab === "group" && !groupId)}
+            >
+              Send
+            </button>
           </div>
         </div>
       </div>
-      {showSearch && (
-        <div className="chat-search-bar" ref={searchInputRef}>
-          <input
-            className="search-input"
-            type="text"
-            placeholder="Find a previous chat"
-            value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
-            autoFocus
-          />
-        </div>
-      )}
-      <div className="chat-window">
-        {filteredMessages.map((msg, i) => (
-          <div key={i} className={`chat-message${msg.username === username ? " own-message" : ""}`}>
-            <span className="chat-username">{msg.username}</span>
-            <span className="chat-text">{msg.text}</span>
-          </div>
-        ))}
-        <div ref={chatEndRef} />
-      </div>
-      <form className="chat-input-row" onSubmit={e => { e.preventDefault(); sendMessage(); }}>
-        <input
-          className="chat-input"
-          value={message}
-          onChange={e => setMessage(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-          placeholder="Type a message"
-        />
-        <button className="chat-send-button" type="submit">Send</button>
-      </form>
     </div>
   );
 }
-
-export default App;
