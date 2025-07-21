@@ -15,7 +15,7 @@ const MONGODB_URI = "mongodb+srv://jsingh2779048:Amandeep27@cluster0.ojuvvts.mon
 
 const allowedOrigins = [
   "http://localhost:3000",
-  "https://chatapplication-seven-taupe.vercel.app/"
+  "https://chatapplication-seven-taupe.vercel.app"
 ];
 
 const io = new Server(server, {
