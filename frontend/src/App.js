@@ -3,8 +3,8 @@ import io from "socket.io-client";
 import axios from "axios";
 import "./App.css";
 
-const socket = io("http://localhost:5000");
-const API_BASE = "http://localhost:5000";
+const socket = io("https://chatapplication-production-c391.up.railway.app");
+const API_BASE = "https://chatapplication-production-c391.up.railway.app";
 
 export default function App() {
   const [username, setUsername] = useState("");
@@ -27,26 +27,32 @@ export default function App() {
     scrollToBottom();
   }, [messages]);
 
-  useEffect(() => {
-    if (!isLoggedIn) return;
+ useEffect(() => {
+  if (!isLoggedIn) return;
 
-    socket.on("receivePersonalMessage", (data) => {
-      if (data.sender === selectedUser || data.receiver === selectedUser) {
-        setMessages(prev => [...prev, data]);
-      }
-    });
+  socket.on("receivePersonalMessage", (data) => {
+    if ((data.sender === selectedUser || data.receiver === selectedUser) && !data.isGroup) {
+      setMessages(prev => [...prev, data]);
+    }
+  });
 
-    socket.on("receiveGroupMessage", (data) => {
-      if (data.receiver === groupId) {
-        setMessages(prev => [...prev, data]);
-      }
-    });
+  socket.on("receiveGroupMessage", (data) => {
+    if (data.receiver === groupId && data.isGroup) {
+      setMessages(prev => [...prev, data]);
+    }
+  });
 
-    return () => {
-      socket.off("receivePersonalMessage");
-      socket.off("receiveGroupMessage");
-    };
-  }, [isLoggedIn, selectedUser, groupId]);
+  socket.on("groupInfo", (data) => {
+    setGroupId(data.groupId);
+    setGroupName(data.groupName);
+  });
+
+  return () => {
+    socket.off("receivePersonalMessage");
+    socket.off("receiveGroupMessage");
+    socket.off("groupInfo");
+  };
+}, [isLoggedIn, selectedUser, groupId]);
 
   const handleSignup = async () => {
     try {
@@ -76,18 +82,23 @@ export default function App() {
       console.error("Failed to fetch users", err);
     }
   };
-
-  const fetchMessages = async (receiver) => {
-    try {
-      const res = await axios.get(`${API_BASE}/messages/${username}`);
+const fetchMessages = async (receiver) => {
+  try {
+    const res = await axios.get(`${API_BASE}/messages/${username}`);
+    
+    if (activeTab === "users") {
       setMessages(res.data.filter(msg => 
-        (msg.sender === receiver || msg.receiver === receiver) ||
-        (msg.receiver === groupId && activeTab === "group")
+        ((msg.sender === receiver || msg.receiver === receiver) && !msg.isGroup)
       ));
-    } catch (err) {
-      console.error("Failed to fetch messages", err);
+    } else if (activeTab === "group") {
+      setMessages(res.data.filter(msg => 
+        msg.receiver === receiver && msg.isGroup
+      ));
     }
-  };
+  } catch (err) {
+    console.error("Failed to fetch messages", err);
+  }
+};
 
   const createGroup = async () => {
     const name = prompt("Enter group name:");
@@ -108,43 +119,46 @@ export default function App() {
     }
   };
 
-  const joinGroup = async () => {
-    const name = prompt("Enter group name:");
-    if (!name) return;
+ const joinGroup = async () => {
+  const name = prompt("Enter group name:");
+  if (!name) return;
+  
+  try {
+    const res = await axios.post(`${API_BASE}/group/join`, {
+      groupName: name,
+      username
+    });
     
-    try {
-      const res = await axios.post(`${API_BASE}/group/join`, {
-        groupName: name,
-        username
-      });
-      setGroupId(res.data.groupId);
-      setGroupName(res.data.groupName);
-      setActiveTab("group");
-      fetchMessages(res.data.groupId);
-    } catch (err) {
-      alert(err.response?.data?.error || "Join group failed");
-    }
-  };
+    // Emit joinGroup event to socket
+    socket.emit("joinGroup", {
+      groupId: res.data.groupId,
+      username
+    });
+    
+    // Fetch previous messages
+    fetchMessages(res.data.groupId);
+    setActiveTab("group");
+  } catch (err) {
+    alert(err.response?.data?.error || "Join group failed");
+  }
+};
 
-  const sendMessage = () => {
-    if (!message.trim()) return;
-    
-    if (activeTab === "users" && selectedUser) {
-      socket.emit("sendPersonalMessage", {
-        sender: username,
-        receiver: selectedUser,
-        content: message
-      });
-    } else if (activeTab === "group" && groupId) {
-      socket.emit("sendGroupMessage", {
-        groupId,
-        sender: username,
-        content: message
-      });
-    }
-    
-    setMessage("");
-  };
+const sendMessage = () => {
+  if (!message.trim()) return;
+  
+  if (activeTab === "users" && selectedUser) {
+    socket.emit("sendPersonalMessage", {
+      sender: username,
+      receiver: selectedUser,
+      content: message
+    });
+  } else if (activeTab === "group" && groupId) {
+    socket.emit("sendGroupMessage", {
+      groupId,
+      sender: username,
+      content: message
+    });
+  }};
 
   const handleKeyPress = (e) => {
     if (e.key === "Enter") {

@@ -14,7 +14,8 @@ const PORT = process.env.PORT || 5000;
 const MONGODB_URI = "mongodb+srv://jsingh2779048:Amandeep27@cluster0.ojuvvts.mongodb.net/textnest?retryWrites=true&w=majority&appName=Cluster0";
 
 const allowedOrigins = [
-  "http://localhost:3000"
+  "http://localhost:3000",
+  "https://chatapplication-seven-taupe.vercel.app/"
 ];
 
 const io = new Server(server, {
@@ -185,22 +186,56 @@ io.on("connection", (socket) => {
   });
 
   // Group message
-  socket.on("sendGroupMessage", async ({ groupId, sender, content }) => {
-    const message = {
-      sender,
-      receiver: groupId,
-      content,
-      isGroup: true,
-      timestamp: new Date(),
-    };
+// Update the socket.io group message handling
+socket.on("sendGroupMessage", async ({ groupId, sender, content }) => {
+  const message = {
+    sender,
+    receiver: groupId,
+    content,
+    isGroup: true,
+    timestamp: new Date(),
+  };
 
-    try {
-      await Message.create(message);
-      io.emit("receiveGroupMessage", message);
-    } catch (err) {
-      console.error("❌ Failed to store group message", err);
-    }
-  });
+  try {
+    // Save to database
+    await Message.create(message);
+    
+    // Get all members in the group
+    const group = await Group.findOne({ groupId });
+    if (!group) return;
+
+    // Emit to all members of the group
+    group.members.forEach(member => {
+      io.emit("receiveGroupMessage", {
+        ...message,
+        // Add group info for the frontend
+        groupId,
+        groupName: group.groupName
+      });
+    });
+  } catch (err) {
+    console.error("❌ Failed to store group message", err);
+  }
+});
+
+// Update the joinGroup event
+socket.on("joinGroup", async ({ groupId, username }) => {
+  try {
+    const group = await Group.findOne({ groupId });
+    if (!group) return;
+
+    socket.join(groupId);
+    console.log(`${username} joined group ${groupId}`);
+
+    // Send group info to the user
+    socket.emit("groupInfo", {
+      groupId,
+      groupName: group.groupName
+    });
+  } catch (err) {
+    console.error("Error joining group", err);
+  }
+});
 
   socket.on("disconnect", () => {
     console.log("❌ User disconnected:", socket.id);
