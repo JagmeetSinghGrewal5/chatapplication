@@ -20,6 +20,11 @@
 
 body {
   background-color: #f5f5f5;
+  background-image: url("https://media.istockphoto.com/id/1945538809/vector/speech-bubble-talking-chatting-quote-communication-abstract-background.jpg?s=2048x2048&w=is&k=20&c=W22FjBV28QmM49IByt6ejSSuC6OYt1oUvc2WGUNHRHg=");
+  background-size: cover;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-attachment: fixed;
   color: #333;
   line-height: 1.6;
 }
