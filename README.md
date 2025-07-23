@@ -4,7 +4,7 @@ A real-time chat application built with React frontend and Node.js backend using
 
 ## 🚀 Live Demo
 
-- **Frontend**: https://textnest.vercel.app/
+- **Frontend**: https://chatapplication-seven-taupe.vercel.app/
 - **Backend API**: https://textnest.onrender.com
 
 ## 🛠️ Local Development Setup
@@ -22,7 +22,7 @@ A real-time chat application built with React frontend and Node.js backend using
 2. Navigate to frontend: `cd frontend`
 3. Install dependencies: `npm install`
 4. Start the development server: `npm start`
-5. Frontend will run at http://localhost:3000  https://chatapplication-seven-taupe.vercel.app/
+5. Frontend will run at https://chatapplication-seven-taupe.vercel.app/
 
 ## 🌐 Production Deployment
 
