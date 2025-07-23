@@ -22,7 +22,7 @@ A real-time chat application built with React frontend and Node.js backend using
 2. Navigate to frontend: `cd frontend`
 3. Install dependencies: `npm install`
 4. Start the development server: `npm start`
-5. Frontend will run at http://localhost:3000
+5. Frontend will run at http://localhost:3000  https://chatapplication-seven-taupe.vercel.app/
 
 ## 🌐 Production Deployment
 
